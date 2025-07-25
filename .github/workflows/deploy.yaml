@@ -1,0 +1,96 @@
+name: Build and Deploy Flyway Migration
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  IMAGE_NAME: ghcr.io/${{ github.repository }}
+  IMAGE_TAG: ${{ github.sha }}
+  RELEASE_NAME: db-migration-${{ github.sha }}
+  JOB_NAME: db-migration-${{ github.sha }}
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate Flyway scripts (pre-check)
+        run: ./gradlew flywayValidate --no-daemon
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Docker image (Gradle Flyway app)
+        run: |
+          docker build -t $IMAGE_NAME:$IMAGE_TAG -t $IMAGE_NAME:latest .
+
+      - name: Push Docker images
+        run: |
+          docker push $IMAGE_NAME:$IMAGE_TAG
+          docker push $IMAGE_NAME:latest
+
+      - name: Deploy Helm Job to k3s
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.K3S_HOST }}
+          username: ${{ secrets.K3S_USER }}
+          key: ${{ secrets.K3S_SSH_KEY }}
+          script: |
+            set -e
+            cd ~/helm-values/charts/db-migration
+
+            echo "Deploying Helm release $RELEASE_NAME"
+
+            helm upgrade --install $RELEASE_NAME . \
+              --namespace devincooper \
+              --set image.repository=$IMAGE_NAME \
+              --set image.tag=$IMAGE_TAG \
+              --set jobName=$JOB_NAME \
+              --atomic --wait
+
+      - name: Validate Flyway Job Success or Roll Back
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.K3S_HOST }}
+          username: ${{ secrets.K3S_USER }}
+          key: ${{ secrets.K3S_SSH_KEY }}
+          script: |
+            echo "Waiting for Job: $JOB_NAME"
+            if ! kubectl wait --for=condition=complete --timeout=90s job/$JOB_NAME -n devincooper; then
+              echo "❌ Flyway job failed — rolling back"
+              echo "🔍 Logs:"
+              kubectl logs job/$JOB_NAME -n devincooper || true
+
+              echo "🧹 Uninstalling failed Helm release: $RELEASE_NAME"
+              helm uninstall $RELEASE_NAME -n devincooper || true
+
+              exit 1
+            else
+              echo "✅ Migration job $JOB_NAME completed successfully."
+            fi
+
+      - name: Prune old Helm releases (keep latest 5)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.K3S_HOST }}
+          username: ${{ secrets.K3S_USER }}
+          key: ${{ secrets.K3S_SSH_KEY }}
+          script: |
+            echo "Pruning old db-migration releases in devincooper namespace..."
+            helm list -n devincooper --filter '^db-migration-' --output json | \
+              jq -r 'sort_by(.updated) | reverse | .[5:] | .[].name' | \
+              xargs -r -n1 helm uninstall -n devincooper
