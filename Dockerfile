@@ -1,14 +1,11 @@
-# Build stage
-FROM gradle:8.5-jdk21 AS build
+# --- Build Stage ---
+FROM gradle:8.14.3-jdk21 AS build
+COPY . /app
 WORKDIR /app
+RUN gradle clean build --no-daemon
 
-COPY . .
-RUN gradle bootJar --no-daemon
-
-# Run stage
+# --- Runtime Stage ---
 FROM eclipse-temurin:21-jre
 WORKDIR /app
-
-COPY --from-build /app/build/libs/*.jar app.jar
-
+COPY --from=build /app/build/libs/*.jar app.jar
 ENTRYPOINT ["java", "-jar", "app.jar"]
