@@ -6,7 +6,7 @@ on:
       - main
 
 env:
-  IMAGE_NAME: ghcr.io/${{ github.repository }}
+  IMAGE_NAME: ghcr.io/${{ github.actor }}/db-migration
   IMAGE_TAG: ${{ github.sha }}
   RELEASE_NAME: db-migration-${{ github.sha }}
   JOB_NAME: db-migration-${{ github.sha }}
