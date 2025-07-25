@@ -2,7 +2,7 @@ plugins {
 	id 'java'
 	id 'org.springframework.boot' version '3.4.3'
 	id 'io.spring.dependency-management' version '1.1.7'
-	id 'org.flywaydb.flyway' version '9.22.3'
+	id 'org.flywaydb.flyway' version '9.22.3' // ✅ Flyway plugin
 }
 
 group = 'space.devincoopers'
@@ -25,6 +25,13 @@ dependencies {
 	runtimeOnly 'com.mysql:mysql-connector-j'
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+flyway {
+	url = System.getenv("FLYWAY_URL") ?: 'jdbc:mysql://localhost:3306/portfolio?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC'
+	user = System.getenv("FLYWAY_USER") ?: 'portfolio_user'
+	password = System.getenv("FLYWAY_PASSWORD") ?: 'securepassword' // 🔁 Replace for local dev
+	locations = ['filesystem:src/main/resources/db/migration']
 }
 
 tasks.named('test') {
