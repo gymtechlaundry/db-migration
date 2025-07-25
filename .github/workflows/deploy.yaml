@@ -52,7 +52,7 @@ jobs:
         with:
           host: ${{ secrets.K3S_HOST }}
           username: ${{ secrets.K3S_USER }}
-          key_path: $SSH_KEY_FILE
+          key_path: /tmp/k3s_ssh_key
           script: |
             set -e
             cd ~/helm-values/charts/db-migration
@@ -71,7 +71,7 @@ jobs:
         with:
           host: ${{ secrets.K3S_HOST }}
           username: ${{ secrets.K3S_USER }}
-          key_path: $SSH_KEY_FILE
+          key_path: /tmp/k3s_ssh_key
           script: |
             echo "Waiting for Job: $JOB_NAME"
             if ! kubectl wait --for=condition=complete --timeout=90s job/$JOB_NAME -n devincooper; then
@@ -92,9 +92,13 @@ jobs:
         with:
           host: ${{ secrets.K3S_HOST }}
           username: ${{ secrets.K3S_USER }}
-          key_path: $SSH_KEY_FILE
+          key_path: /tmp/k3s_ssh_key
           script: |
             echo "Pruning old db-migration releases in devincooper namespace..."
             helm list -n devincooper --filter '^db-migration-' --output json | \
               jq -r 'sort_by(.updated) | reverse | .[5:] | .[].name' | \
               xargs -r -n1 helm uninstall -n devincooper
+
+      - name: Clean up temporary key
+        if: always()
+        run: rm -f /tmp/k3s_ssh_key
