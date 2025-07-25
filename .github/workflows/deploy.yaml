@@ -61,15 +61,16 @@ jobs:
           host: ${{ secrets.K3S_HOST }}
           username: ${{ secrets.K3S_USER }}
           key: ${{ secrets.K3S_SSH_KEY }}
+          envs: IMAGE_NAME,IMAGE_TAG,RELEASE_NAME,JOB_NAME
           script: |
             set -e
             echo "Navigating to Helm chart..."
             cd ~/helm-values/charts/db-migration
-
+            
             echo "🧪 Checking chart contents:"
             ls -la
             cat Chart.yaml || echo "❌ Missing Chart.yaml"
-
+            
             echo "🚀 Deploying Helm release $RELEASE_NAME"
             helm upgrade --install "$RELEASE_NAME" . \
               --namespace devincooper \
@@ -78,7 +79,7 @@ jobs:
               --set image.tag=$IMAGE_TAG \
               --set jobName=$JOB_NAME \
               --atomic --wait
-
+            
             echo "⏳ Waiting for job to complete..."
             if ! kubectl wait --for=condition=complete --timeout=90s job/$JOB_NAME -n devincooper; then
               echo "❌ Flyway job failed — rolling back"
