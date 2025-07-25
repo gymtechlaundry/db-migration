@@ -10,6 +10,7 @@ env:
   IMAGE_TAG: ${{ github.sha }}
   RELEASE_NAME: db-migration-${{ github.sha }}
   JOB_NAME: db-migration-${{ github.sha }}
+  SSH_KEY_FILE: /tmp/k3s_ssh_key
 
 jobs:
   build-and-deploy:
@@ -40,12 +41,18 @@ jobs:
           docker push $IMAGE_NAME:$IMAGE_TAG
           docker push $IMAGE_NAME:latest
 
+      # --- Decode the SSH Key ---
+      - name: Prepare SSH Key
+        run: |
+          echo "${{ secrets.K3S_SSH_KEY }}" | base64 -d > $SSH_KEY_FILE
+          chmod 600 $SSH_KEY_FILE
+
       - name: Deploy Helm Job to k3s
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.K3S_HOST }}
           username: ${{ secrets.K3S_USER }}
-          key: ${{ secrets.K3S_SSH_KEY }}
+          key_path: $SSH_KEY_FILE
           script: |
             set -e
             cd ~/helm-values/charts/db-migration
@@ -64,7 +71,7 @@ jobs:
         with:
           host: ${{ secrets.K3S_HOST }}
           username: ${{ secrets.K3S_USER }}
-          key: ${{ secrets.K3S_SSH_KEY }}
+          key_path: $SSH_KEY_FILE
           script: |
             echo "Waiting for Job: $JOB_NAME"
             if ! kubectl wait --for=condition=complete --timeout=90s job/$JOB_NAME -n devincooper; then
@@ -85,7 +92,7 @@ jobs:
         with:
           host: ${{ secrets.K3S_HOST }}
           username: ${{ secrets.K3S_USER }}
-          key: ${{ secrets.K3S_SSH_KEY }}
+          key_path: $SSH_KEY_FILE
           script: |
             echo "Pruning old db-migration releases in devincooper namespace..."
             helm list -n devincooper --filter '^db-migration-' --output json | \
