@@ -64,13 +64,15 @@ jobs:
           envs: IMAGE_NAME,IMAGE_TAG,RELEASE_NAME,JOB_NAME
           script: |
             set -e
+            export KUBECONFIG=$HOME/.kube/config
+
             echo "Navigating to Helm chart..."
             cd ~/helm-values/charts/db-migration
-            
+
             echo "🧪 Checking chart contents:"
             ls -la
             cat Chart.yaml || echo "❌ Missing Chart.yaml"
-            
+
             echo "🚀 Deploying Helm release $RELEASE_NAME"
             helm upgrade --install "$RELEASE_NAME" . \
               --namespace devincooper \
@@ -79,7 +81,7 @@ jobs:
               --set image.tag=$IMAGE_TAG \
               --set jobName=$JOB_NAME \
               --atomic --wait
-            
+
             echo "⏳ Waiting for job to complete..."
             if ! kubectl wait --for=condition=complete --timeout=90s job/$JOB_NAME -n devincooper; then
               echo "❌ Flyway job failed — rolling back"
